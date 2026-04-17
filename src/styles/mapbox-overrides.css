@@ -1,0 +1,13 @@
+.mapboxgl-ctrl-group {
+  background: #111 !important;
+  border: 1px solid #333 !important;
+}
+
+.mapboxgl-ctrl-group button {
+  background: #111 !important;
+  color: #ccc !important;
+}
+
+.mapboxgl-ctrl-group button span {
+  filter: invert(1);
+}
