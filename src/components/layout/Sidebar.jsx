@@ -20,25 +20,51 @@ export default function Sidebar({
   onFlyTo,
   onLike,
   onShowUpload,
-  user,
-  onSignOut,
-  onOpenAuth
+  isMobile,
+  onCloseSidebar
 }) {
   const filtered = useLocationFilters(locations, filterType, filterRisk, searchInput);
 
+  const containerStyle = isMobile ? {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    width: "85vw",
+    maxWidth: 340,
+    height: "100vh",
+    background: "#0d0d0d",
+    borderRight: "1px solid #1f1f1f",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+    zIndex: 20,
+    transform: isOpen ? "translateX(0)" : "translateX(-100%)",
+    transition: "transform 0.3s ease",
+  } : {
+    width: isOpen ? 340 : 0,
+    minWidth: isOpen ? 340 : 0,
+    background: "#0d0d0d",
+    borderRight: "1px solid #1f1f1f",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+    transition: "width 0.3s ease, min-width 0.3s ease",
+    zIndex: 10,
+    position: "relative"
+  };
+
   return (
-    <div style={{
-      width: isOpen ? 340 : 0,
-      minWidth: isOpen ? 340 : 0,
-      background: "#0d0d0d",
-      borderRight: "1px solid #1f1f1f",
-      display: "flex",
-      flexDirection: "column",
-      overflow: "hidden",
-      transition: "width 0.3s ease, min-width 0.3s ease",
-      zIndex: 10,
-      position: "relative"
-    }}>
+    <>
+      {isMobile && isOpen && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.5)",
+          zIndex: 19,
+          onClick: onCloseSidebar
+        }} />
+      )}
+      <div style={containerStyle}>
       {/* Header */}
       <div style={{
         padding: "20px 18px 14px",
@@ -71,51 +97,6 @@ export default function Sidebar({
             </div>
           </div>
         </div>
-
-        {/* Auth Section */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          fontSize: 11,
-          color: "#888"
-        }}>
-          {user ? (
-            <>
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: "70%" }}>
-                {user.email}
-              </span>
-              <button
-                onClick={onSignOut}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "#c8b89a",
-                  cursor: "pointer",
-                  fontSize: 11,
-                  padding: 0
-                }}
-              >
-                Sign Out
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={onOpenAuth}
-              style={{
-                background: "#c8b89a",
-                color: "#0a0a0a",
-                border: "none",
-                padding: "4px 8px",
-                fontSize: 11,
-                fontWeight: "bold",
-                cursor: "pointer"
-              }}
-            >
-              SIGN IN
-            </button>
-          )}
-        </div>
       </div>
 
       {/* Search + Filters */}
@@ -145,7 +126,6 @@ export default function Sidebar({
             isLiked={likedIds.has(selected.id)}
             onLike={onLike}
             onBack={onDeselectLocation}
-            user={user}
           />
         ) : (
           <LocationList
@@ -170,7 +150,7 @@ export default function Sidebar({
             background: "#c8b89a",
             color: "#0a0a0a",
             border: "none",
-            padding: "11px",
+            padding: isMobile ? "14px" : "11px",
             fontFamily: "'Bebas Neue'",
             fontSize: 15,
             letterSpacing: 2,
@@ -191,5 +171,6 @@ export default function Sidebar({
         </div>
       </div>
     </div>
+    </>
   );
 }

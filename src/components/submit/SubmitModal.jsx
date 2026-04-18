@@ -1,12 +1,16 @@
 import { IRELAND_COUNTIES } from "../../lib/mapbox";
 
+import { useResponsive } from "../../hooks/useResponsive";
+
 export default function SubmitModal({
   isOpen,
   form,
   onFormChange,
   onSubmit,
   onClose,
-  isLoading
+  isLoading,
+  perimeterData,
+  isMobile
 }) {
   if (!isOpen) return null;
 
@@ -30,7 +34,8 @@ export default function SubmitModal({
         maxWidth: "95vw",
         maxHeight: "90vh",
         overflowY: "auto",
-        padding: 28
+        padding: isMobile ? "16px 14px" : 28,
+        paddingBottom: isMobile ? 80 : 28
       }}>
         <div style={{
           display: "flex",
@@ -80,6 +85,20 @@ export default function SubmitModal({
           letterSpacing: 0.5
         }}>
           ⚠ Do not share access info that could lead to harm. Respect private property. No vandalism. Stay safe and don't enter structurally unsound buildings alone.
+        </div>
+
+        <div style={{
+          background: perimeterData ? "#4ade8011" : "#111",
+          border: `1px solid ${perimeterData ? "#4ade8033" : "#1f1f1f"}`,
+          padding: "8px 14px",
+          marginBottom: 16,
+          fontSize: 10,
+          color: perimeterData ? "#4ade80" : "#555",
+          letterSpacing: 0.5
+        }}>
+          {perimeterData
+            ? "✓ Perimeter drawn — polygon will be saved with this location"
+            : "No perimeter drawn — close this modal and use DRAW PERIMETER on the map first (optional)"}
         </div>
 
         {[

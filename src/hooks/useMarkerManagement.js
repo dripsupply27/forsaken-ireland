@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import mapboxgl from "mapbox-gl";
 import { RISK_COLORS, TYPE_ICONS } from "../lib/mapbox";
 
 export function useMarkerManagement(mapRef, locations, filterType, filterRisk, search, onSelectLocation, setSidebarOpen) {
@@ -51,7 +52,6 @@ export function useMarkerManagement(mapRef, locations, filterType, filterRisk, s
         }
       });
 
-      const { default: mapboxgl } = require("mapbox-gl");
       const marker = new mapboxgl.Marker({ element: el, anchor: "center" })
         .setLngLat([loc.lng, loc.lat])
         .addTo(mapRef.current);

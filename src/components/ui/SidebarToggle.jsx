@@ -1,4 +1,8 @@
+import { useResponsive } from "../../hooks/useResponsive";
+
 export default function SidebarToggle({ isOpen, onClick }) {
+  const { isMobile } = useResponsive();
+
   return (
     <button
       onClick={onClick}
@@ -9,11 +13,11 @@ export default function SidebarToggle({ isOpen, onClick }) {
         background: "#0d0d0d",
         border: "1px solid #2a2a2a",
         color: "#c8b89a",
-        width: 36,
-        height: 36,
+        width: isMobile ? 44 : 36,
+        height: isMobile ? 44 : 36,
         cursor: "pointer",
         fontFamily: "'Bebas Neue'",
-        fontSize: 18,
+        fontSize: isMobile ? 22 : 18,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",

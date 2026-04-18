@@ -3,7 +3,7 @@ import RiskBadge from "../ui/RiskBadge";
 import TagList from "../ui/TagList";
 import CommentThread from "../comments/CommentThread";
 
-export default function LocationDetail({ location, isLiked, onLike, onBack, user }) {
+export default function LocationDetail({ location, isLiked, onLike, onBack }) {
   return (
     <div style={{
       padding: "14px 14px 10px",
@@ -120,7 +120,7 @@ export default function LocationDetail({ location, isLiked, onLike, onBack, user
         </button>
       </div>
 
-      <CommentThread locationId={location.id} user={user} />
+      <CommentThread locationId={location.id} />
 
       <button
         onClick={onBack}

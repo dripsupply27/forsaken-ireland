@@ -11,7 +11,8 @@
       "Bash(git push *)",
       "Read(//home/noeltan843/**)",
       "Bash(zip -r forsaken-ireland.zip forsaken-ireland -x \"forsaken-ireland/node_modules/*\" \"forsaken-ireland/dist/*\" \"forsaken-ireland/.git/*\")",
-      "Bash(tar --exclude=node_modules --exclude=dist --exclude=.git -czf forsaken-ireland.tar.gz forsaken-ireland/)"
+      "Bash(tar --exclude=node_modules --exclude=dist --exclude=.git -czf forsaken-ireland.tar.gz forsaken-ireland/)",
+      "Bash(npm install *)"
     ]
   }
 }

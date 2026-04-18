@@ -2,18 +2,15 @@ import { useState } from "react";
 import { useComments } from "../../hooks/useComments";
 import { useContentModeration } from "../../hooks/useContentModeration";
 
-export default function CommentThread({ locationId, user }) {
-  const { comments, loading, addComment, deleteComment } = useComments(locationId);
+export default function CommentThread({ locationId }) {
+  const { comments, loading, addComment } = useComments(locationId);
   const { moderateContent } = useContentModeration();
   const [newComment, setNewComment] = useState("");
+  const [displayName, setDisplayName] = useState(() => localStorage.getItem("forsaken_display_name") || "");
   const [submitting, setSubmitting] = useState(false);
 
   const handleAddComment = async () => {
     if (!newComment.trim()) return;
-    if (!user) {
-      alert("Please sign in to comment");
-      return;
-    }
 
     setSubmitting(true);
     try {
@@ -28,21 +25,16 @@ export default function CommentThread({ locationId, user }) {
         return;
       }
 
-      await addComment(newComment, user.email);
+      const author = displayName.trim() || "anonymous";
+      await addComment(newComment, author);
+      if (displayName.trim()) {
+        localStorage.setItem("forsaken_display_name", displayName.trim());
+      }
       setNewComment("");
     } catch (err) {
       alert("Failed to add comment: " + err.message);
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const handleDeleteComment = async (commentId) => {
-    if (!confirm("Delete this comment?")) return;
-    try {
-      await deleteComment(commentId);
-    } catch (err) {
-      alert("Failed to delete comment: " + err.message);
     }
   };
 
@@ -91,22 +83,8 @@ export default function CommentThread({ locationId, user }) {
                 marginBottom: 4
               }}>
                 <div style={{ color: "#c8b89a", fontWeight: "bold" }}>
-                  @{comment.user_email.split("@")[0]}
+                  @{comment.user_email}
                 </div>
-                {user?.email === comment.user_email && (
-                  <button
-                    onClick={() => handleDeleteComment(comment.id)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "#666",
-                      cursor: "pointer",
-                      fontSize: 10
-                    }}
-                  >
-                    ✕
-                  </button>
-                )}
               </div>
               <div style={{ color: "#999", lineHeight: 1.4, wordBreak: "break-word" }}>
                 {comment.content}
@@ -123,7 +101,28 @@ export default function CommentThread({ locationId, user }) {
         </div>
       )}
 
-      {user ? (
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <input
+          type="text"
+          placeholder="Your name (optional)"
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+          onBlur={() => {
+            if (displayName.trim()) {
+              localStorage.setItem("forsaken_display_name", displayName.trim());
+            }
+          }}
+          disabled={submitting}
+          style={{
+            padding: "8px 10px",
+            background: "#0a0a0a",
+            border: "1px solid #2a2a2a",
+            color: "#999",
+            fontFamily: "'Space Mono', monospace",
+            fontSize: 9,
+            outline: "none"
+          }}
+        />
         <div style={{ display: "flex", gap: 8 }}>
           <input
             type="text"
@@ -138,6 +137,7 @@ export default function CommentThread({ locationId, user }) {
               background: "#0a0a0a",
               border: "1px solid #2a2a2a",
               color: "#e0d8c8",
+              fontFamily: "'Space Mono', monospace",
               fontSize: 10,
               outline: "none"
             }}
@@ -159,17 +159,7 @@ export default function CommentThread({ locationId, user }) {
             {submitting ? "..." : "POST"}
           </button>
         </div>
-      ) : (
-        <div style={{
-          fontSize: 10,
-          color: "#666",
-          textAlign: "center",
-          padding: "8px",
-          background: "#0a0a0a"
-        }}>
-          Sign in to comment
-        </div>
-      )}
+      </div>
     </div>
   );
 }

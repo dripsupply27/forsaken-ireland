@@ -11,3 +11,12 @@
 .mapboxgl-ctrl-group button span {
   filter: invert(1);
 }
+
+/* Hide MapboxDraw default toolbar */
+.mapboxgl-ctrl-group:has(.mapbox-gl-draw_ctrl-draw-btn) {
+  display: none !important;
+}
+
+.mapbox-gl-draw_ctrl-draw-btn {
+  display: none !important;
+}
