@@ -5,7 +5,13 @@
       "Bash(git init *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git config *)"
+      "Bash(git config *)",
+      "Bash(git remote *)",
+      "Bash(git branch *)",
+      "Bash(git push *)",
+      "Read(//home/noeltan843/**)",
+      "Bash(zip -r forsaken-ireland.zip forsaken-ireland -x \"forsaken-ireland/node_modules/*\" \"forsaken-ireland/dist/*\" \"forsaken-ireland/.git/*\")",
+      "Bash(tar --exclude=node_modules --exclude=dist --exclude=.git -czf forsaken-ireland.tar.gz forsaken-ireland/)"
     ]
   }
 }
