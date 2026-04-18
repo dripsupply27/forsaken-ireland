@@ -20,13 +20,20 @@ export function useMarkerManagement(mapRef, locations, filterType, filterRisk, s
     });
 
     filtered.forEach(loc => {
+      const zoom = mapRef.current.getZoom();
+      const scale = zoom < 8 ? 0.6 : zoom < 10 ? 0.8 : 1;
+      const width = Math.round(44 * scale);
+      const height = Math.round(44 * scale);
+      const fontSize = Math.round(16 * scale);
+      const borderWidth = Math.max(2, Math.round(3 * scale));
+
       const el = document.createElement("div");
       el.style.cssText = `
-        width:44px;height:44px;border-radius:50% 50% 50% 0;
-        background:${RISK_COLORS[loc.risk]};border:3px solid #1a1a1a;cursor:pointer;
+        width:${width}px;height:${height}px;border-radius:50% 50% 50% 0;
+        background:${RISK_COLORS[loc.risk]};border:${borderWidth}px solid #1a1a1a;cursor:pointer;
         box-shadow:0 4px 16px rgba(0,0,0,0.8), inset 0 1px 2px rgba(255,255,255,0.2);
-        transition:filter 0.2s ease;
-        display:flex;align-items:center;justify-content:center;font-size:16px;
+        transition:filter 0.2s ease, width 0.3s ease, height 0.3s ease;
+        display:flex;align-items:center;justify-content:center;font-size:${fontSize}px;
         transform:rotate(-45deg) translate3d(0,0,0);
         will-change:filter;
         user-select:none;

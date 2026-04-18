@@ -10,9 +10,6 @@ export default function MapContainer({
   filteredCount,
   mapStyle,
   onToggleMapStyle,
-  onStartDrawing,
-  onClearPerimeter,
-  hasPerimeter,
   isMobile
 }) {
   return (
@@ -49,31 +46,6 @@ export default function MapContainer({
         }}
       >
         {mapStyle === "satellite" ? "🛣 STREET" : "🛰 SATELLITE"}
-      </button>
-
-      <button
-        onClick={hasPerimeter ? onClearPerimeter : onStartDrawing}
-        className="btn-hover"
-        title={hasPerimeter ? "Clear drawn perimeter" : "Draw perimeter around building"}
-        style={{
-          position: "absolute",
-          top: 60,
-          right: 20,
-          background: hasPerimeter ? "#4ade8033" : "#0d0d0d",
-          color: hasPerimeter ? "#4ade80" : "#c8b89a",
-          border: `1px solid ${hasPerimeter ? "#4ade80" : "#2a2a2a"}`,
-          padding: "8px 12px",
-          minHeight: isMobile ? 44 : "auto",
-          minWidth: isMobile ? 44 : "auto",
-          fontSize: 11,
-          fontFamily: "'Bebas Neue'",
-          letterSpacing: 1,
-          cursor: "pointer",
-          zIndex: 5,
-          borderRadius: "2px"
-        }}
-      >
-        {hasPerimeter ? "✓ CLEAR PERIMETER" : "DRAW PERIMETER"}
       </button>
 
       {!mapboxLoaded && <LoadingScreen />}
