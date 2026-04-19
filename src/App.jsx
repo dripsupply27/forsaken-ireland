@@ -15,80 +15,55 @@ import { useContentModeration } from "./hooks/useContentModeration";
 import { useResponsive } from "./hooks/useResponsive";
 import "./styles/mapbox-overrides.css";
 
-function useMapbox() {
-  return true;
-}
+function useMapbox() { return true; }
 
 export default function App() {
-  // Map setup
   const mapboxLoaded = useMapbox();
   const mapContainer = useRef(null);
   const mapRef = useRef(null);
+  const pinMarkerRef = useRef(null);
 
-  // Data state
   const { locations, loading: locationsLoading, addLocation, updateLikes } = useLocations();
   const { uploadPhoto } = usePhotoUpload();
   const { moderateLocation } = useContentModeration();
   const { isMobile } = useResponsive();
   const [selected, setSelected] = useState(null);
   const [likedIds, setLikedIds] = useState(new Set());
-
-  // Map state
   const [isMapLoaded, setIsMapLoaded] = useState(false);
-
-  // UI state
   const [filterType, setFilterType] = useState("all");
   const [filterRisk, setFilterRisk] = useState("all");
   const [showUpload, setShowUpload] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [uploading, setUploading] = useState(false);
   const [mapStyle, setMapStyle] = useState("satellite");
+  const [pinDropMode, setPinDropMode] = useState(false);
 
-  // Upload form state
   const [uploadForm, setUploadForm] = useState({
     name: "", county: "", lat: "", lng: "", type: "industrial",
-    risk: "medium", description: "", access: "", tags: "", photo: null
+    risk: "medium", description: "", access: "", photo: null
   });
 
-  // Debounced search
   const { searchInput, setSearchInput, search } = useDebouncedSearch();
 
-  // Initialize map
   useEffect(() => {
     if (!mapboxLoaded || !mapContainer.current || mapRef.current) return;
-
     mapboxgl.accessToken = MAPBOX_TOKEN;
-    const initialStyle = mapStyle === "street"
-      ? "mapbox://styles/mapbox/streets-v12"
-      : MAPBOX_STYLE_SATELLITE;
-
     const map = new mapboxgl.Map({
       container: mapContainer.current,
-      style: initialStyle,
+      style: MAPBOX_STYLE_SATELLITE,
       center: IRELAND_CENTER,
       zoom: 6.5,
       maxBounds: IRELAND_MAX_BOUNDS,
       attributionControl: false,
       antialias: true,
-      optimizeForTerrain: true,
       fadeDuration: 200,
     });
-
     map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "bottom-right");
-    map.on('load', () => {
-      map.setPaintProperty('background', 'background-opacity', 1);
-      setIsMapLoaded(true);
-    });
-
+    map.on('load', () => setIsMapLoaded(true));
     mapRef.current = map;
-    return () => {
-      map.remove();
-      mapRef.current = null;
-    };
+    return () => { map.remove(); mapRef.current = null; };
   }, [mapboxLoaded]);
 
-
-  // Change map style
   useEffect(() => {
     if (!mapRef.current) return;
     const newStyle = mapStyle === "street"
@@ -97,13 +72,60 @@ export default function App() {
     mapRef.current.setStyle(newStyle);
   }, [mapStyle]);
 
-  // Marker management hook
-  useMarkerManagement(mapRef, locations, filterType, filterRisk, search, setSelected, setSidebarOpen);
+  // Pin drop mode
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const map = mapRef.current;
 
-  // Compute filtered locations
+    if (pinDropMode) {
+      map.getCanvas().style.cursor = "crosshair";
+      const handleClick = (e) => {
+        const { lng, lat } = e.lngLat;
+
+        // Remove old pin marker
+        if (pinMarkerRef.current) pinMarkerRef.current.remove();
+
+        // Add new pin marker
+        const el = document.createElement("div");
+        el.style.cssText = `
+          width:20px;height:20px;border-radius:50%;
+          background:#c8b89a;border:3px solid #fff;
+          box-shadow:0 2px 8px rgba(0,0,0,0.8);
+        `;
+        pinMarkerRef.current = new mapboxgl.Marker({ element: el, anchor: "center" })
+          .setLngLat([lng, lat])
+          .addTo(map);
+
+        setUploadForm(prev => ({
+          ...prev,
+          lat: lat.toFixed(6),
+          lng: lng.toFixed(6)
+        }));
+
+        map.getCanvas().style.cursor = "";
+        setPinDropMode(false);
+        setShowUpload(true);
+      };
+
+      map.once("click", handleClick);
+      return () => {
+        map.off("click", handleClick);
+        map.getCanvas().style.cursor = "";
+      };
+    }
+  }, [pinDropMode]);
+
+  // Clean up pin marker when modal closes
+  useEffect(() => {
+    if (!showUpload && pinMarkerRef.current) {
+      pinMarkerRef.current.remove();
+      pinMarkerRef.current = null;
+    }
+  }, [showUpload]);
+
+  useMarkerManagement(mapRef, locations, filterType, filterRisk, search, setSelected, setSidebarOpen);
   const filtered = useLocationFilters(locations, filterType, filterRisk, search);
 
-  // Event handlers
   const handleLike = async (id) => {
     if (likedIds.has(id)) return;
     setLikedIds(prev => new Set([...prev, id]));
@@ -117,23 +139,20 @@ export default function App() {
   const handleUpload = async () => {
     setUploading(true);
     try {
-      // Moderate content
       const moderation = await moderateLocation(uploadForm.description, uploadForm.access);
       if (!moderation.safe) {
         const flaggedItems = Object.entries(moderation.flags)
           .filter(([_, flagged]) => flagged)
           .map(([name]) => name)
           .join(", ");
-        alert(`Content flagged by moderation: ${flaggedItems}. Please revise your submission.`);
+        alert(`Content flagged: ${flaggedItems}. Please revise your submission.`);
         setUploading(false);
         return;
       }
-
       let photoUrl = null;
       if (uploadForm.photo) {
         photoUrl = await uploadPhoto(uploadForm.photo, Date.now(), "anonymous");
       }
-
       const newLoc = {
         name: uploadForm.name,
         county: uploadForm.county,
@@ -146,25 +165,13 @@ export default function App() {
         likes: 0,
         uploaded_by: "anonymous",
         date: new Date().toISOString().slice(0, 10),
-        tags: uploadForm.tags.split(",").map(t => t.trim()).filter(Boolean),
+        tags: [],
         photo: photoUrl,
       };
       await addLocation(newLoc);
-      setShowUpload(false);;
-      setUploadForm({
-        name: "",
-        county: "",
-        lat: "",
-        lng: "",
-        type: "industrial",
-        risk: "medium",
-        description: "",
-        access: "",
-        tags: "",
-        photo: null
-      });
+      setShowUpload(false);
+      setUploadForm({ name: "", county: "", lat: "", lng: "", type: "industrial", risk: "medium", description: "", access: "", photo: null });
     } catch (err) {
-      console.error("Failed to upload location:", err);
       alert("Upload failed: " + err.message);
     } finally {
       setUploading(false);
@@ -172,30 +179,35 @@ export default function App() {
   };
 
   const handleFlyTo = (coords) => {
-    if (mapRef.current) {
-      mapRef.current.flyTo({ center: coords, zoom: 13, duration: 1000 });
-    }
+    if (mapRef.current) mapRef.current.flyTo({ center: coords, zoom: 13, duration: 1000 });
+  };
+
+  const handlePinDrop = () => {
+    setShowUpload(false);
+    setPinDropMode(true);
   };
 
   return (
-    <div style={{
-      display: "flex",
-      height: "100vh",
-      width: "100vw",
-      background: "#0a0a0a",
-      fontFamily: "'Courier New', monospace",
-      color: "#e0d8c8",
-      overflow: "hidden",
-      position: "relative"
-    }}>
+    <div style={{ display: "flex", height: "100vh", width: "100vw", background: "#0a0a0a", fontFamily: "'Courier New', monospace", color: "#e0d8c8", overflow: "hidden", position: "relative" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap');
         @keyframes load { 0% { left: -40% } 100% { left: 100% } }
-        .loc-card:hover { background: #1a1a1a !important; border-color: #555 !important; }
+        .loc-card:hover { background: #1a1a1a !important; }
         .btn-hover:hover { opacity: 0.85; transform: translateY(-1px); }
       `}</style>
 
       {locationsLoading && <LoadingScreen />}
+
+      {pinDropMode && (
+        <div style={{
+          position: "fixed", top: 70, left: "50%", transform: "translateX(-50%)",
+          background: "#c8b89a", color: "#0a0a0a", padding: "10px 20px",
+          fontFamily: "'Bebas Neue'", fontSize: 16, letterSpacing: 2,
+          zIndex: 50, boxShadow: "0 4px 16px rgba(0,0,0,0.8)"
+        }}>
+          📍 CLICK THE MAP TO DROP YOUR PIN
+        </div>
+      )}
 
       <Sidebar
         isOpen={sidebarOpen}
@@ -236,6 +248,7 @@ export default function App() {
         onClose={() => setShowUpload(false)}
         isLoading={uploading}
         isMobile={isMobile}
+        onPinDrop={handlePinDrop}
       />
     </div>
   );
