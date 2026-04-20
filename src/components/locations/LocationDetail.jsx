@@ -25,7 +25,7 @@ export default function LocationDetail({ location, isLiked, onLike, onBack }) {
       </div>
 
       {location.photo && (
-        <img src={location.photo} alt={location.name}
+        <img src={location.photo} alt={location.name} loading="lazy" decoding="async"
           style={{ width: "100%", height: 200, objectFit: "cover", marginBottom: 10, borderRadius: "2px" }} />
       )}
 

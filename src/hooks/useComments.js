@@ -8,9 +8,9 @@ export function useComments(locationId) {
 
   useEffect(() => {
     if (!locationId) return;
-
     fetchComments();
-    subscribeToComments();
+    const unsub = subscribeToComments();
+    return unsub;
   }, [locationId]);
 
   async function fetchComments() {
@@ -21,7 +21,6 @@ export function useComments(locationId) {
         .select("*")
         .eq("location_id", locationId)
         .order("created_at", { ascending: true });
-
       if (error) throw error;
       setComments(data || []);
       setError(null);
@@ -50,23 +49,15 @@ export function useComments(locationId) {
         }
       )
       .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => { supabase.removeChannel(subscription); };
   }
 
   async function addComment(content, userEmail) {
     try {
       const { data, error } = await supabase
         .from("comments")
-        .insert([{
-          location_id: locationId,
-          user_email: userEmail,
-          content: content
-        }])
+        .insert([{ location_id: locationId, user_email: userEmail, content }])
         .select();
-
       if (error) throw error;
       return data[0];
     } catch (err) {
@@ -77,11 +68,7 @@ export function useComments(locationId) {
 
   async function deleteComment(commentId) {
     try {
-      const { error } = await supabase
-        .from("comments")
-        .delete()
-        .eq("id", commentId);
-
+      const { error } = await supabase.from("comments").delete().eq("id", commentId);
       if (error) throw error;
     } catch (err) {
       console.error("Error deleting comment:", err);

@@ -2,43 +2,33 @@ import { useEffect, useRef } from "react";
 import mapboxgl from "mapbox-gl";
 import { RISK_COLORS, TYPE_ICONS } from "../lib/mapbox";
 
-export function useMarkerManagement(mapRef, locations, filterType, filterRisk, search, onSelectLocation, setSidebarOpen) {
-  const markersRef = useRef([]);
+export function useMarkerManagement(mapRef, locations, filterType, filterRisk, search, onSelectLocation, setSidebarOpen, styleLoaded) {
+  const markerMapRef = useRef(new Map());
 
   useEffect(() => {
     if (!mapRef.current) return;
+    const currentIds = new Set(locations.map(l => l.id));
 
-    markersRef.current.forEach(m => m.remove());
-    markersRef.current = [];
-
-    const filtered = locations.filter(loc => {
-      if (filterType !== "all" && loc.type !== filterType) return false;
-      if (filterRisk !== "all" && loc.risk !== filterRisk) return false;
-      if (search && !loc.name.toLowerCase().includes(search.toLowerCase()) &&
-          !loc.county.toLowerCase().includes(search.toLowerCase())) return false;
-      return true;
+    markerMapRef.current.forEach((val, id) => {
+      if (!currentIds.has(id)) {
+        val.marker.remove();
+        markerMapRef.current.delete(id);
+      }
     });
 
-    filtered.forEach(loc => {
-      const zoom = mapRef.current.getZoom();
-      const scale = zoom < 8 ? 0.6 : zoom < 10 ? 0.8 : 1;
-      const width = Math.round(44 * scale);
-      const height = Math.round(44 * scale);
-      const fontSize = Math.round(16 * scale);
-      const borderWidth = Math.max(2, Math.round(3 * scale));
+    locations.forEach(loc => {
+      if (markerMapRef.current.has(loc.id)) return;
 
       const el = document.createElement("div");
       el.style.cssText = `
-        width:${width}px;height:${height}px;border-radius:50% 50% 50% 0;
-        background:${RISK_COLORS[loc.risk]};border:${borderWidth}px solid #1a1a1a;cursor:pointer;
+        width:44px;height:44px;border-radius:50% 50% 50% 0;
+        background:${RISK_COLORS[loc.risk]};border:3px solid #1a1a1a;cursor:pointer;
         box-shadow:0 4px 16px rgba(0,0,0,0.8), inset 0 1px 2px rgba(255,255,255,0.2);
-        transition:filter 0.2s ease, width 0.3s ease, height 0.3s ease;
-        display:flex;align-items:center;justify-content:center;font-size:${fontSize}px;
+        transition:filter 0.2s ease;
+        display:flex;align-items:center;justify-content:center;font-size:16px;
         transform:rotate(-45deg) translate3d(0,0,0);
-        will-change:filter;
-        user-select:none;
+        will-change:filter;user-select:none;
       `;
-
       const inner = document.createElement("div");
       inner.style.cssText = "transform:rotate(45deg);";
       inner.textContent = TYPE_ICONS[loc.type] || TYPE_ICONS.default;
@@ -50,21 +40,32 @@ export function useMarkerManagement(mapRef, locations, filterType, filterRisk, s
       el.addEventListener("mouseleave", () => {
         el.style.filter = "brightness(1)";
       });
-
       el.addEventListener("click", () => {
         onSelectLocation(loc);
         setSidebarOpen(true);
-        if (mapRef.current) {
-          mapRef.current.flyTo({ center: [loc.lng, loc.lat], zoom: 13, duration: 1000 });
-        }
+        mapRef.current?.flyTo({ center: [loc.lng, loc.lat], zoom: 13, duration: 1000 });
       });
 
       const marker = new mapboxgl.Marker({ element: el, anchor: "center" })
         .setLngLat([loc.lng, loc.lat])
         .addTo(mapRef.current);
-      markersRef.current.push(marker);
-    });
-  }, [locations, filterType, filterRisk, search, mapRef, onSelectLocation, setSidebarOpen]);
 
-  return markersRef;
+      markerMapRef.current.set(loc.id, { marker, el, loc });
+    });
+  }, [locations, mapRef, styleLoaded]);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const searchLower = search.toLowerCase();
+    markerMapRef.current.forEach(({ el, loc }) => {
+      const typeMatch = filterType === "all" || loc.type === filterType;
+      const riskMatch = filterRisk === "all" || loc.risk === filterRisk;
+      const searchMatch = !search ||
+        loc.name.toLowerCase().includes(searchLower) ||
+        loc.county.toLowerCase().includes(searchLower);
+      el.style.display = (typeMatch && riskMatch && searchMatch) ? "" : "none";
+    });
+  }, [filterType, filterRisk, search]);
+
+  return markerMapRef;
 }

@@ -27,6 +27,7 @@ export default function App() {
   const { uploadPhoto } = usePhotoUpload();
   const { moderateLocation } = useContentModeration();
   const { isMobile } = useResponsive();
+
   const [selected, setSelected] = useState(null);
   const [likedIds, setLikedIds] = useState(new Set());
   const [isMapLoaded, setIsMapLoaded] = useState(false);
@@ -37,6 +38,7 @@ export default function App() {
   const [uploading, setUploading] = useState(false);
   const [mapStyle, setMapStyle] = useState("satellite");
   const [pinDropMode, setPinDropMode] = useState(false);
+  const [styleLoaded, setStyleLoaded] = useState(0);
 
   const [uploadForm, setUploadForm] = useState({
     name: "", county: "", lat: "", lng: "", type: "industrial",
@@ -44,6 +46,7 @@ export default function App() {
   });
 
   const { searchInput, setSearchInput, search } = useDebouncedSearch();
+  const filtered = useLocationFilters(locations, filterType, filterRisk, search);
 
   useEffect(() => {
     if (!mapboxLoaded || !mapContainer.current || mapRef.current) return;
@@ -59,7 +62,7 @@ export default function App() {
       fadeDuration: 200,
     });
     map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "bottom-right");
-    map.on('load', () => setIsMapLoaded(true));
+    map.on("load", () => setIsMapLoaded(true));
     mapRef.current = map;
     return () => { map.remove(); mapRef.current = null; };
   }, [mapboxLoaded]);
@@ -69,53 +72,34 @@ export default function App() {
     const newStyle = mapStyle === "street"
       ? "mapbox://styles/mapbox/streets-v12"
       : MAPBOX_STYLE_SATELLITE;
+    mapRef.current.once("style.load", () => {
+      setStyleLoaded(n => n + 1);
+    });
     mapRef.current.setStyle(newStyle);
   }, [mapStyle]);
 
-  // Pin drop mode
   useEffect(() => {
     if (!mapRef.current) return;
     const map = mapRef.current;
-
     if (pinDropMode) {
       map.getCanvas().style.cursor = "crosshair";
       const handleClick = (e) => {
         const { lng, lat } = e.lngLat;
-
-        // Remove old pin marker
         if (pinMarkerRef.current) pinMarkerRef.current.remove();
-
-        // Add new pin marker
         const el = document.createElement("div");
-        el.style.cssText = `
-          width:20px;height:20px;border-radius:50%;
-          background:#c8b89a;border:3px solid #fff;
-          box-shadow:0 2px 8px rgba(0,0,0,0.8);
-        `;
+        el.style.cssText = "width:20px;height:20px;border-radius:50%;background:#c8b89a;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.8);";
         pinMarkerRef.current = new mapboxgl.Marker({ element: el, anchor: "center" })
-          .setLngLat([lng, lat])
-          .addTo(map);
-
-        setUploadForm(prev => ({
-          ...prev,
-          lat: lat.toFixed(6),
-          lng: lng.toFixed(6)
-        }));
-
+          .setLngLat([lng, lat]).addTo(map);
+        setUploadForm(prev => ({ ...prev, lat: lat.toFixed(6), lng: lng.toFixed(6) }));
         map.getCanvas().style.cursor = "";
         setPinDropMode(false);
         setShowUpload(true);
       };
-
       map.once("click", handleClick);
-      return () => {
-        map.off("click", handleClick);
-        map.getCanvas().style.cursor = "";
-      };
+      return () => { map.off("click", handleClick); map.getCanvas().style.cursor = ""; };
     }
   }, [pinDropMode]);
 
-  // Clean up pin marker when modal closes
   useEffect(() => {
     if (!showUpload && pinMarkerRef.current) {
       pinMarkerRef.current.remove();
@@ -123,8 +107,7 @@ export default function App() {
     }
   }, [showUpload]);
 
-  useMarkerManagement(mapRef, locations, filterType, filterRisk, search, setSelected, setSidebarOpen);
-  const filtered = useLocationFilters(locations, filterType, filterRisk, search);
+  useMarkerManagement(mapRef, locations, filterType, filterRisk, search, setSelected, setSidebarOpen, styleLoaded);
 
   const handleLike = async (id) => {
     if (likedIds.has(id)) return;
@@ -139,13 +122,32 @@ export default function App() {
   const handleUpload = async () => {
     setUploading(true);
     try {
+      const lat = parseFloat(uploadForm.lat);
+      const lng = parseFloat(uploadForm.lng);
+      if (isNaN(lat) || isNaN(lng) || lat < 51.3 || lat > 55.5 || lng < -10.7 || lng > -5.9) {
+        alert("Coordinates must be within Ireland. Use the 📍 Drop Pin button to set them accurately.");
+        setUploading(false);
+        return;
+      }
+      if (uploadForm.photo) {
+        const validTypes = ["image/jpeg", "image/png", "image/webp"];
+        if (!validTypes.includes(uploadForm.photo.type)) {
+          alert("Invalid file type. Only JPG, PNG, and WebP images are allowed.");
+          setUploading(false);
+          return;
+        }
+        if (uploadForm.photo.size > 5 * 1024 * 1024) {
+          alert("Photo must be under 5MB. Please compress or resize the image.");
+          setUploading(false);
+          return;
+        }
+      }
       const moderation = await moderateLocation(uploadForm.description, uploadForm.access);
       if (!moderation.safe) {
-        const flaggedItems = Object.entries(moderation.flags)
-          .filter(([_, flagged]) => flagged)
-          .map(([name]) => name)
-          .join(", ");
-        alert(`Content flagged: ${flaggedItems}. Please revise your submission.`);
+        const msg = moderation.error
+          ? moderation.error
+          : `Content flagged: ${Object.entries(moderation.flags).filter(([_, v]) => v).map(([k]) => k).join(", ")}. Please revise your submission.`;
+        alert(msg);
         setUploading(false);
         return;
       }
@@ -153,22 +155,14 @@ export default function App() {
       if (uploadForm.photo) {
         photoUrl = await uploadPhoto(uploadForm.photo, Date.now(), "anonymous");
       }
-      const newLoc = {
-        name: uploadForm.name,
-        county: uploadForm.county,
-        lat: parseFloat(uploadForm.lat),
-        lng: parseFloat(uploadForm.lng),
-        type: uploadForm.type,
-        risk: uploadForm.risk,
-        description: uploadForm.description,
-        access: uploadForm.access,
-        likes: 0,
-        uploaded_by: "anonymous",
+      await addLocation({
+        name: uploadForm.name, county: uploadForm.county, lat, lng,
+        type: uploadForm.type, risk: uploadForm.risk,
+        description: uploadForm.description, access: uploadForm.access,
+        likes: 0, uploaded_by: "anonymous",
         date: new Date().toISOString().slice(0, 10),
-        tags: [],
-        photo: photoUrl,
-      };
-      await addLocation(newLoc);
+        tags: [], photo: photoUrl,
+      });
       setShowUpload(false);
       setUploadForm({ name: "", county: "", lat: "", lng: "", type: "industrial", risk: "medium", description: "", access: "", photo: null });
     } catch (err) {
@@ -182,11 +176,6 @@ export default function App() {
     if (mapRef.current) mapRef.current.flyTo({ center: coords, zoom: 13, duration: 1000 });
   };
 
-  const handlePinDrop = () => {
-    setShowUpload(false);
-    setPinDropMode(true);
-  };
-
   return (
     <div style={{ display: "flex", height: "100vh", width: "100vw", background: "#0a0a0a", fontFamily: "'Courier New', monospace", color: "#e0d8c8", overflow: "hidden", position: "relative" }}>
       <style>{`
@@ -195,60 +184,35 @@ export default function App() {
         .loc-card:hover { background: #1a1a1a !important; }
         .btn-hover:hover { opacity: 0.85; transform: translateY(-1px); }
       `}</style>
-
       {locationsLoading && <LoadingScreen />}
-
       {pinDropMode && (
-        <div style={{
-          position: "fixed", top: 70, left: "50%", transform: "translateX(-50%)",
-          background: "#c8b89a", color: "#0a0a0a", padding: "10px 20px",
-          fontFamily: "'Bebas Neue'", fontSize: 16, letterSpacing: 2,
-          zIndex: 50, boxShadow: "0 4px 16px rgba(0,0,0,0.8)"
-        }}>
+        <div style={{ position: "fixed", top: 70, left: "50%", transform: "translateX(-50%)", background: "#c8b89a", color: "#0a0a0a", padding: "10px 20px", fontFamily: "'Bebas Neue'", fontSize: 16, letterSpacing: 2, zIndex: 50, boxShadow: "0 4px 16px rgba(0,0,0,0.8)" }}>
           📍 CLICK THE MAP TO DROP YOUR PIN
         </div>
       )}
-
       <Sidebar
-        isOpen={sidebarOpen}
-        locations={locations}
-        selected={selected}
-        likedIds={likedIds}
-        searchInput={searchInput}
-        filterType={filterType}
-        filterRisk={filterRisk}
-        onSearchChange={setSearchInput}
-        onFilterTypeChange={setFilterType}
-        onFilterRiskChange={setFilterRisk}
-        onSelectLocation={setSelected}
-        onDeselectLocation={() => setSelected(null)}
-        onFlyTo={handleFlyTo}
-        onLike={handleLike}
-        onShowUpload={() => setShowUpload(true)}
-        isMobile={isMobile}
-        onCloseSidebar={() => setSidebarOpen(false)}
+        isOpen={sidebarOpen} locations={locations} filtered={filtered}
+        selected={selected} likedIds={likedIds} searchInput={searchInput}
+        filterType={filterType} filterRisk={filterRisk}
+        onSearchChange={setSearchInput} onFilterTypeChange={setFilterType}
+        onFilterRiskChange={setFilterRisk} onSelectLocation={setSelected}
+        onDeselectLocation={() => setSelected(null)} onFlyTo={handleFlyTo}
+        onLike={handleLike} onShowUpload={() => setShowUpload(true)}
+        isMobile={isMobile} onCloseSidebar={() => setSidebarOpen(false)}
       />
-
       <MapContainer
-        mapContainer={mapContainer}
-        mapboxLoaded={mapboxLoaded}
-        sidebarOpen={sidebarOpen}
-        onToggleSidebar={() => setSidebarOpen(p => !p)}
-        filteredCount={filtered.length}
-        mapStyle={mapStyle}
+        mapContainer={mapContainer} mapboxLoaded={mapboxLoaded}
+        sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen(p => !p)}
+        filteredCount={filtered.length} mapStyle={mapStyle}
         onToggleMapStyle={() => setMapStyle(s => s === "satellite" ? "street" : "satellite")}
         isMobile={isMobile}
       />
-
       <SubmitModal
-        isOpen={showUpload}
-        form={uploadForm}
+        isOpen={showUpload} form={uploadForm}
         onFormChange={(field, value) => setUploadForm(p => ({ ...p, [field]: value }))}
-        onSubmit={handleUpload}
-        onClose={() => setShowUpload(false)}
-        isLoading={uploading}
-        isMobile={isMobile}
-        onPinDrop={handlePinDrop}
+        onSubmit={handleUpload} onClose={() => setShowUpload(false)}
+        isLoading={uploading} isMobile={isMobile}
+        onPinDrop={() => { setShowUpload(false); setPinDropMode(true); }}
       />
     </div>
   );
