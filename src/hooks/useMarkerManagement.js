@@ -1,12 +1,12 @@
 import { useEffect, useRef } from "react";
+import mapboxgl from "mapbox-gl";
 import { RISK_COLORS, TYPE_ICONS } from "../lib/mapbox";
 
-export function useMarkerManagement(mapRef, locations, filterType, filterRisk, search, onSelectLocation, setSidebarOpen, styleLoaded, mapboxgl) {
+export function useMarkerManagement(mapRef, locations, filterType, filterRisk, search, onSelectLocation, setSidebarOpen, styleLoaded) {
   const markerMapRef = useRef(new Map());
 
   useEffect(() => {
-    // Wait until mapboxgl is lazy-loaded and map is ready
-    if (!mapRef.current || !mapboxgl) return;
+    if (!mapRef.current) return;
     const currentIds = new Set(locations.map(l => l.id));
 
     markerMapRef.current.forEach((val, id) => {
@@ -52,7 +52,7 @@ export function useMarkerManagement(mapRef, locations, filterType, filterRisk, s
 
       markerMapRef.current.set(loc.id, { marker, el, loc });
     });
-  }, [locations, mapRef, styleLoaded, mapboxgl]);
+  }, [locations, mapRef, styleLoaded]);
 
   useEffect(() => {
     if (!mapRef.current) return;

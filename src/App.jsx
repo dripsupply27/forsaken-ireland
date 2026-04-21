@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { MAPBOX_TOKEN, MAPBOX_STYLE_SATELLITE, IRELAND_CENTER, IRELAND_MAX_BOUNDS } from "./lib/mapbox";
 import Sidebar from "./components/layout/Sidebar";
@@ -20,13 +21,6 @@ export default function App() {
   const pinMarkerRef = useRef(null);
   const lastSubmitRef = useRef(0);
 
-  // Fix #7: lazy-load mapboxgl — UI renders immediately, map loads async
-  const [mapboxgl, setMapboxgl] = useState(null);
-
-  useEffect(() => {
-    import("mapbox-gl").then(mod => setMapboxgl(mod.default));
-  }, []);
-
   const { locations, loading: locationsLoading, addLocation, updateLikes } = useLocations();
   const { uploadPhoto } = usePhotoUpload();
   const { moderateLocation } = useContentModeration();
@@ -34,7 +28,6 @@ export default function App() {
 
   const [selected, setSelected] = useState(null);
   const [likedIds, setLikedIds] = useState(new Set());
-  const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [filterType, setFilterType] = useState("all");
   const [filterRisk, setFilterRisk] = useState("all");
   const [showUpload, setShowUpload] = useState(false);
@@ -52,9 +45,8 @@ export default function App() {
   const { searchInput, setSearchInput, search } = useDebouncedSearch();
   const filtered = useLocationFilters(locations, filterType, filterRisk, search);
 
-  // Map init — only runs once mapboxgl is loaded
   useEffect(() => {
-    if (!mapboxgl || !mapContainer.current || mapRef.current) return;
+    if (!mapContainer.current || mapRef.current) return;
     mapboxgl.accessToken = MAPBOX_TOKEN;
     const map = new mapboxgl.Map({
       container: mapContainer.current,
@@ -67,24 +59,21 @@ export default function App() {
       fadeDuration: 200,
     });
     map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "bottom-right");
-    map.on("load", () => setIsMapLoaded(true));
     mapRef.current = map;
     return () => { map.remove(); mapRef.current = null; };
-  }, [mapboxgl]);
+  }, []);
 
   useEffect(() => {
     if (!mapRef.current) return;
     const newStyle = mapStyle === "street"
       ? "mapbox://styles/mapbox/streets-v12"
       : MAPBOX_STYLE_SATELLITE;
-    mapRef.current.once("style.load", () => {
-      setStyleLoaded(n => n + 1);
-    });
+    mapRef.current.once("style.load", () => setStyleLoaded(n => n + 1));
     mapRef.current.setStyle(newStyle);
   }, [mapStyle]);
 
   useEffect(() => {
-    if (!mapRef.current || !mapboxgl) return;
+    if (!mapRef.current) return;
     const map = mapRef.current;
     if (pinDropMode) {
       map.getCanvas().style.cursor = "crosshair";
@@ -103,7 +92,7 @@ export default function App() {
       map.once("click", handleClick);
       return () => { map.off("click", handleClick); map.getCanvas().style.cursor = ""; };
     }
-  }, [pinDropMode, mapboxgl]);
+  }, [pinDropMode]);
 
   useEffect(() => {
     if (!showUpload && pinMarkerRef.current) {
@@ -112,23 +101,20 @@ export default function App() {
     }
   }, [showUpload]);
 
-  useMarkerManagement(mapRef, locations, filterType, filterRisk, search, setSelected, setSidebarOpen, styleLoaded, mapboxgl);
+  useMarkerManagement(mapRef, locations, filterType, filterRisk, search, setSelected, setSidebarOpen, styleLoaded);
 
   const handleLike = async (id) => {
     if (likedIds.has(id)) return;
     setLikedIds(prev => new Set([...prev, id]));
-    // Fix #10: no longer passes a count — RPC handles atomic increment
     await updateLikes(id);
     if (selected?.id === id) setSelected(prev => ({ ...prev, likes: prev.likes + 1 }));
   };
 
   const handleUpload = async () => {
-    // Fix #4: rate limit — 30s between submissions
     if (Date.now() - lastSubmitRef.current < 30000) {
       alert("Please wait 30 seconds between submissions.");
       return;
     }
-
     setUploading(true);
     try {
       const lat = parseFloat(uploadForm.lat);
@@ -138,7 +124,6 @@ export default function App() {
         setUploading(false);
         return;
       }
-
       if (uploadForm.photo) {
         const validTypes = ["image/jpeg", "image/png", "image/webp"];
         if (!validTypes.includes(uploadForm.photo.type)) {
@@ -152,7 +137,6 @@ export default function App() {
           return;
         }
       }
-
       const moderation = await moderateLocation(uploadForm.description, uploadForm.access);
       if (!moderation.safe) {
         const msg = moderation.error
@@ -162,19 +146,15 @@ export default function App() {
         setUploading(false);
         return;
       }
-
       let photoUrl = null;
       if (uploadForm.photo) {
         photoUrl = await uploadPhoto(uploadForm.photo, Date.now(), "anonymous");
       }
-
-      // Fix #5: anonymous fingerprint for accountability
       let userId = localStorage.getItem("forsaken_uid");
       if (!userId) {
         userId = crypto.randomUUID();
         localStorage.setItem("forsaken_uid", userId);
       }
-
       await addLocation({
         name: uploadForm.name, county: uploadForm.county, lat, lng,
         type: uploadForm.type, risk: uploadForm.risk,
@@ -183,7 +163,6 @@ export default function App() {
         date: new Date().toISOString().slice(0, 10),
         tags: [], photo: photoUrl,
       });
-
       lastSubmitRef.current = Date.now();
       setShowUpload(false);
       setUploadForm({ name: "", county: "", lat: "", lng: "", type: "industrial", risk: "medium", description: "", access: "", photo: null });
@@ -226,7 +205,7 @@ export default function App() {
       />
 
       <MapContainer
-        mapContainer={mapContainer} mapboxLoaded={!!mapboxgl}
+        mapContainer={mapContainer} mapboxLoaded={true}
         sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen(p => !p)}
         filteredCount={filtered.length} mapStyle={mapStyle}
         onToggleMapStyle={() => setMapStyle(s => s === "satellite" ? "street" : "satellite")}
