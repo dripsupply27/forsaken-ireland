@@ -1,8 +1,4 @@
-import { useResponsive } from "../../hooks/useResponsive";
-
-export default function SidebarToggle({ isOpen, onClick }) {
-  const { isMobile } = useResponsive();
-
+export default function SidebarToggle({ isOpen, onClick, isMobile }) {
   return (
     <button
       onClick={onClick}

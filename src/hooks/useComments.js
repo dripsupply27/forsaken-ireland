@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 
+const log = (...args) => { if (import.meta.env.DEV) console.error(...args); };
+
 export function useComments(locationId) {
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,7 +27,7 @@ export function useComments(locationId) {
       setComments(data || []);
       setError(null);
     } catch (err) {
-      console.error("Error fetching comments:", err);
+      log("Error fetching comments:", err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -61,7 +63,7 @@ export function useComments(locationId) {
       if (error) throw error;
       return data[0];
     } catch (err) {
-      console.error("Error adding comment:", err);
+      log("Error adding comment:", err);
       throw err;
     }
   }
@@ -71,7 +73,7 @@ export function useComments(locationId) {
       const { error } = await supabase.from("comments").delete().eq("id", commentId);
       if (error) throw error;
     } catch (err) {
-      console.error("Error deleting comment:", err);
+      log("Error deleting comment:", err);
       throw err;
     }
   }

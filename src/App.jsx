@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { MAPBOX_TOKEN, MAPBOX_STYLE_SATELLITE, IRELAND_CENTER, IRELAND_MAX_BOUNDS } from "./lib/mapbox";
 import Sidebar from "./components/layout/Sidebar";
@@ -15,13 +14,18 @@ import { useContentModeration } from "./hooks/useContentModeration";
 import { useResponsive } from "./hooks/useResponsive";
 import "./styles/mapbox-overrides.css";
 
-function useMapbox() { return true; }
-
 export default function App() {
-  const mapboxLoaded = useMapbox();
   const mapContainer = useRef(null);
   const mapRef = useRef(null);
   const pinMarkerRef = useRef(null);
+  const lastSubmitRef = useRef(0);
+
+  // Fix #7: lazy-load mapboxgl — UI renders immediately, map loads async
+  const [mapboxgl, setMapboxgl] = useState(null);
+
+  useEffect(() => {
+    import("mapbox-gl").then(mod => setMapboxgl(mod.default));
+  }, []);
 
   const { locations, loading: locationsLoading, addLocation, updateLikes } = useLocations();
   const { uploadPhoto } = usePhotoUpload();
@@ -48,8 +52,9 @@ export default function App() {
   const { searchInput, setSearchInput, search } = useDebouncedSearch();
   const filtered = useLocationFilters(locations, filterType, filterRisk, search);
 
+  // Map init — only runs once mapboxgl is loaded
   useEffect(() => {
-    if (!mapboxLoaded || !mapContainer.current || mapRef.current) return;
+    if (!mapboxgl || !mapContainer.current || mapRef.current) return;
     mapboxgl.accessToken = MAPBOX_TOKEN;
     const map = new mapboxgl.Map({
       container: mapContainer.current,
@@ -65,7 +70,7 @@ export default function App() {
     map.on("load", () => setIsMapLoaded(true));
     mapRef.current = map;
     return () => { map.remove(); mapRef.current = null; };
-  }, [mapboxLoaded]);
+  }, [mapboxgl]);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -79,7 +84,7 @@ export default function App() {
   }, [mapStyle]);
 
   useEffect(() => {
-    if (!mapRef.current) return;
+    if (!mapRef.current || !mapboxgl) return;
     const map = mapRef.current;
     if (pinDropMode) {
       map.getCanvas().style.cursor = "crosshair";
@@ -98,7 +103,7 @@ export default function App() {
       map.once("click", handleClick);
       return () => { map.off("click", handleClick); map.getCanvas().style.cursor = ""; };
     }
-  }, [pinDropMode]);
+  }, [pinDropMode, mapboxgl]);
 
   useEffect(() => {
     if (!showUpload && pinMarkerRef.current) {
@@ -107,19 +112,23 @@ export default function App() {
     }
   }, [showUpload]);
 
-  useMarkerManagement(mapRef, locations, filterType, filterRisk, search, setSelected, setSidebarOpen, styleLoaded);
+  useMarkerManagement(mapRef, locations, filterType, filterRisk, search, setSelected, setSidebarOpen, styleLoaded, mapboxgl);
 
   const handleLike = async (id) => {
     if (likedIds.has(id)) return;
     setLikedIds(prev => new Set([...prev, id]));
-    const location = locations.find(l => l.id === id);
-    if (location) {
-      await updateLikes(id, location.likes + 1);
-      if (selected?.id === id) setSelected(prev => ({ ...prev, likes: prev.likes + 1 }));
-    }
+    // Fix #10: no longer passes a count — RPC handles atomic increment
+    await updateLikes(id);
+    if (selected?.id === id) setSelected(prev => ({ ...prev, likes: prev.likes + 1 }));
   };
 
   const handleUpload = async () => {
+    // Fix #4: rate limit — 30s between submissions
+    if (Date.now() - lastSubmitRef.current < 30000) {
+      alert("Please wait 30 seconds between submissions.");
+      return;
+    }
+
     setUploading(true);
     try {
       const lat = parseFloat(uploadForm.lat);
@@ -129,6 +138,7 @@ export default function App() {
         setUploading(false);
         return;
       }
+
       if (uploadForm.photo) {
         const validTypes = ["image/jpeg", "image/png", "image/webp"];
         if (!validTypes.includes(uploadForm.photo.type)) {
@@ -142,6 +152,7 @@ export default function App() {
           return;
         }
       }
+
       const moderation = await moderateLocation(uploadForm.description, uploadForm.access);
       if (!moderation.safe) {
         const msg = moderation.error
@@ -151,18 +162,29 @@ export default function App() {
         setUploading(false);
         return;
       }
+
       let photoUrl = null;
       if (uploadForm.photo) {
         photoUrl = await uploadPhoto(uploadForm.photo, Date.now(), "anonymous");
       }
+
+      // Fix #5: anonymous fingerprint for accountability
+      let userId = localStorage.getItem("forsaken_uid");
+      if (!userId) {
+        userId = crypto.randomUUID();
+        localStorage.setItem("forsaken_uid", userId);
+      }
+
       await addLocation({
         name: uploadForm.name, county: uploadForm.county, lat, lng,
         type: uploadForm.type, risk: uploadForm.risk,
         description: uploadForm.description, access: uploadForm.access,
-        likes: 0, uploaded_by: "anonymous",
+        likes: 0, uploaded_by: userId,
         date: new Date().toISOString().slice(0, 10),
         tags: [], photo: photoUrl,
       });
+
+      lastSubmitRef.current = Date.now();
       setShowUpload(false);
       setUploadForm({ name: "", county: "", lat: "", lng: "", type: "industrial", risk: "medium", description: "", access: "", photo: null });
     } catch (err) {
@@ -179,17 +201,19 @@ export default function App() {
   return (
     <div style={{ display: "flex", height: "100vh", width: "100vw", background: "#0a0a0a", fontFamily: "'Courier New', monospace", color: "#e0d8c8", overflow: "hidden", position: "relative" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap');
         @keyframes load { 0% { left: -40% } 100% { left: 100% } }
         .loc-card:hover { background: #1a1a1a !important; }
         .btn-hover:hover { opacity: 0.85; transform: translateY(-1px); }
       `}</style>
+
       {locationsLoading && <LoadingScreen />}
+
       {pinDropMode && (
         <div style={{ position: "fixed", top: 70, left: "50%", transform: "translateX(-50%)", background: "#c8b89a", color: "#0a0a0a", padding: "10px 20px", fontFamily: "'Bebas Neue'", fontSize: 16, letterSpacing: 2, zIndex: 50, boxShadow: "0 4px 16px rgba(0,0,0,0.8)" }}>
           📍 CLICK THE MAP TO DROP YOUR PIN
         </div>
       )}
+
       <Sidebar
         isOpen={sidebarOpen} locations={locations} filtered={filtered}
         selected={selected} likedIds={likedIds} searchInput={searchInput}
@@ -200,13 +224,15 @@ export default function App() {
         onLike={handleLike} onShowUpload={() => setShowUpload(true)}
         isMobile={isMobile} onCloseSidebar={() => setSidebarOpen(false)}
       />
+
       <MapContainer
-        mapContainer={mapContainer} mapboxLoaded={mapboxLoaded}
+        mapContainer={mapContainer} mapboxLoaded={!!mapboxgl}
         sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen(p => !p)}
         filteredCount={filtered.length} mapStyle={mapStyle}
         onToggleMapStyle={() => setMapStyle(s => s === "satellite" ? "street" : "satellite")}
         isMobile={isMobile}
       />
+
       <SubmitModal
         isOpen={showUpload} form={uploadForm}
         onFormChange={(field, value) => setUploadForm(p => ({ ...p, [field]: value }))}
